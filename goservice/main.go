@@ -9,41 +9,29 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
-
-	"google.golang.org/grpc"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpgrpc"
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
-	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
-	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/semconv"
+	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 	"go.opentelemetry.io/otel/trace"
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 )
 
 func initProvider() func() {
 	ctx := context.Background()
-	collectorAddr, ok := os.LookupEnv("OTEL_ENDPOINT")
+	otlpEndpointAddr, ok := os.LookupEnv("OTEL_ENDPOINT")
+
 	if !ok {
-		collectorAddr = "http://otel:55680"
+		otlpEndpointAddr = "localhost:8200"
 	}
 
-	driver := otlpgrpc.NewDriver(
-		otlpgrpc.WithInsecure(),
-		otlpgrpc.WithEndpoint(collectorAddr),
-		otlpgrpc.WithDialOption(grpc.WithBlock()), // useful for testing
-	)
-	exp, err := otlp.NewExporter(ctx, driver)
+	exp, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(otlpEndpointAddr), otlptracegrpc.WithInsecure())
 	handleErr(err, "failed to create exporter")
 
 	res, err := resource.New(ctx,
@@ -55,32 +43,19 @@ func initProvider() func() {
 
 	bsp := sdktrace.NewBatchSpanProcessor(exp)
 	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithConfig(sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 		sdktrace.WithResource(res),
 		sdktrace.WithSpanProcessor(bsp),
-	)
-
-	cont := controller.New(
-		processor.New(
-			simple.NewWithExactDistribution(),
-			exp,
-		),
-		controller.WithPusher(exp),
-		controller.WithCollectPeriod(2*time.Second),
 	)
 
 	// set global propagator to tracecontext (the default is no-op).
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	otel.SetTracerProvider(tracerProvider)
-	otel.SetMeterProvider(cont.MeterProvider())
-	handleErr(cont.Start(context.Background()), "failed to start controller")
 
 	return func() {
 		// Shutdown will flush any remaining spans.
 		handleErr(tracerProvider.Shutdown(ctx), "failed to shutdown TracerProvider")
 
-		// Push any last metric events to the exporter.
-		handleErr(cont.Stop(context.Background()), "failed to stop controller")
 	}
 }
 
@@ -97,17 +72,17 @@ func main() {
 	defer cancel()
 	msgs := consumerLoop(&ctx)
 	data := make([]dollarsByZip, 0)
+
 	go func() {
 		for msg := range msgs {
 			data = append(data, msg)
 		}
 	}()
+
 	app := fiber.New()
-	app.Use(logger.New())
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.Status(200).JSON(data)
 	})
-
 	app.Listen(":3100")
 }
 
@@ -125,18 +100,16 @@ func spanFromHeaders(topic string, headers []kafka.Header) {
 	}
 
 	tracer := otel.Tracer("api-goservice")
-	attWithTopic := make([]label.KeyValue, 10)
+	attWithTopic := make([]attribute.KeyValue, 10)
 	attWithTopic = append(
 		attWithTopic,
-		label.String("messaging.destination_kind", "topic"),
-		label.String("span.otel.kind", "CONSUMER"),
-		label.String("messaging.system", "kafka"),
-		label.String("net.transport", "IP.TCP"),
-		label.String("messaging.url", "broker:29092"),
-		label.String("messaging.operation", "receive"),
-		label.String("messaging.destination", "stockapp.dollarsbyzip"),
-		//		label.String("messaging.message_id", spanContext.SpanID.String()
-	)
+		attribute.String("messaging.destination_kind", "topic"),
+		attribute.String("span.otel.kind", "CONSUMER"),
+		attribute.String("messaging.system", "kafka"),
+		attribute.String("net.transport", "IP.TCP"),
+		attribute.String("messaging.url", "broker:29092"),
+		attribute.String("messaging.operation", "receive"),
+		attribute.String("messaging.destination", "stockapp.dollarsbyzip"))
 
 	traceID, spanID, err := parseParentTrace(propagatedId)
 	if err != nil {
@@ -144,10 +117,7 @@ func spanFromHeaders(topic string, headers []kafka.Header) {
 		return
 	}
 	ctx := trace.ContextWithRemoteSpanContext(context.Background(),
-		trace.SpanContext{
-			TraceID: *traceID,
-			SpanID:  *spanID,
-		})
+		trace.NewSpanContext(trace.SpanContextConfig{TraceID: *traceID, SpanID: *spanID}))
 	ctx, span := tracer.Start(ctx, "consumer-go-service", trace.WithAttributes(attWithTopic...))
 	defer span.End()
 }
@@ -207,7 +177,7 @@ func consumerLoop(ctx *context.Context) <-chan dollarsByZip {
 						fmt.Printf(" Error: %v\n", err)
 						c.Close()
 					}
-					spanFromHeaders("stargazer-results", e.Headers)
+					spanFromHeaders("stockapp.dollarsbyzip", e.Headers)
 					records <- evt
 
 				case kafka.Error:
@@ -221,6 +191,6 @@ func consumerLoop(ctx *context.Context) <-chan dollarsByZip {
 }
 
 type dollarsByZip struct {
-	zipcode string `json:"ZIPCODE"`
-	total_dollars  string `json:"TOTOAL_DOLLARS"`
+	Zipcode      string  `json:"ZIPCODE"`
+	TotalDollars float64 `json:"TOTAL_DOLLARS"`
 }

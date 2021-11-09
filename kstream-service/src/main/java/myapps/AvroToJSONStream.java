@@ -44,11 +44,7 @@ public class AvroToJSONStream {
         } catch (JsonProcessingException e) {
             e.printStackTrace();
         }
-        if (!key){
-            return actualObj.get("data");
-        }else{
-            return actualObj;
-        }
+        return actualObj;
     }
 
     public static void main(String[] args) throws Exception {
@@ -61,14 +57,15 @@ public class AvroToJSONStream {
 
         final StreamsBuilder builder = new StreamsBuilder();
         final Serde jsonSerde=Serdes.serdeFrom(new JsonSerializer(),new JsonDeserializer());
-        builder.<String, String>stream("stockapp.trades", Consumed.with(avroSerde,avroSerde))
+        final Serde stringSerde=Serdes.String();
+        builder.<String, String>stream("stockapp.trades", Consumed.with(stringSerde,avroSerde))
             .map((key, value) -> {
                 System.out.println(value.toString());
 
-                return KeyValue.pair(avroToJSON(key.toString(), true), avroToJSON(value.toString(), false));
+                return KeyValue.pair(key, avroToJSON(value.toString(),false));
 
             } )
-            .to("stockapp.trades-json", Produced.with(jsonSerde,jsonSerde));
+            .to("stockapp.trades-json", Produced.with(stringSerde,jsonSerde));
 
         final Topology topology = builder.build();
         final KafkaStreams streams = new KafkaStreams(topology, props);

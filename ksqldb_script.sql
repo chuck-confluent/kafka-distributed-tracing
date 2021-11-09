@@ -36,14 +36,15 @@ CREATE STREAM stockapp_trades_transformed_enriched AS
         ON s.userid = u.userid
     EMIT CHANGES;
 
-CREATE TABLE stockapp_dollars_by_zip_5_min 
+CREATE TABLE stockapp_dollars_by_zip_5_min
     WITH (
         KAFKA_TOPIC = 'stockapp.dollarsbyzip',
         PARTITIONS = 1,
         VALUE_FORMAT = 'JSON'
     ) AS
     SELECT
-        contactinfo['zipcode'] AS zipcode,
+        contactinfo['zipcode'],
+        as_value(contactinfo['zipcode']) AS zipcode,
         SUM(dollar_amount) AS total_dollars
     FROM stockapp_trades_transformed_enriched
     WINDOW TUMBLING (SIZE 5 MINUTES)

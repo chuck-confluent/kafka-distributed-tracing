@@ -2,21 +2,24 @@ receivers:
   otlp:
     protocols:
       grpc:
+        endpoint: 0.0.0.0:55680
+
 exporters:
   jaeger:
     endpoint: jaeger:14250
-    tls:
-      insecure: true
-  awsxray:
-  logging:
-    loglevel: info
+    insecure: true
+  otlp:
+    endpoint: "http://apm-server:8200"
+    insecure: true
+
 processors:
   batch:
-    timeout: 10s
-    send_batch_size: 50
+    timeout: 1s
+    send_batch_size: 1024
   memory_limiter:
     limit_mib: 100
     check_interval: 5s
+
 service:
   pipelines:
     metrics:
@@ -25,12 +28,12 @@ service:
       processors:
       - batch
       exporters:
-      - logging
+      - otlp
     traces:
       processors:
       - batch
       receivers:
       - otlp
       exporters:
-      - logging
+      - otlp
       - jaeger

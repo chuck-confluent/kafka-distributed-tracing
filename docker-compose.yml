@@ -38,12 +38,17 @@ services:
       context: ./goservice
     environment:
       BOOTSTRAP_SERVERS: broker:29092
+      OTEL_ENDPOINT: "apm-server:8200"
     ports:
       - '3100:3100'
     depends_on:
-      - broker
-      - zookeeper
-      - otel
+      broker:
+        condition: service_started
+      zookeeper:
+        condition: service_started
+      apm-server:
+        condition: service_healthy
+
 
   kstream-service:
     build:
@@ -51,22 +56,16 @@ services:
     volumes:
       - ./agents:/mnt
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: "service.name=kstream-service"
-      JAVA_TOOL_OPTIONS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -Dotel.exporter.otlp.endpoint=http://otel:55680"
+      OTEL_RESOURCE_ATTRIBUTES: "service.name=kstream-service-apm"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_IMR_EXPORT_INTERVAL: 5000
+      JAVA_TOOL_OPTIONS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar"
     depends_on:
       schema-registry:
         condition: service_healthy
-
-
-  otel:
-    image: otel/opentelemetry-collector-contrib:0.38.0
-    hostname: otel
-    # Entrypoint is the otelcontribcol CLI tool for the collector. See https://github.com/open-telemetry/opentelemetry-collector-contrib
-    command: --config /config/collector-config.yml
-    ports:
-      - '55680:55680'
-    volumes:
-      - ./otel:/config
 
   ksqldb-server:
     image: confluentinc/cp-ksqldb-server:6.2.1
@@ -90,8 +89,13 @@ services:
       KSQL_KSQL_LOGGING_PROCESSING_STREAM_AUTO_CREATE: 'true'
       # # Run script in headless mode
       # KSQL_KSQL_QUERIES_FILE: /tmp/ksqldb_script.sql
-      OTEL_RESOURCE_ATTRIBUTES: "service.name=ksqldb"
-      KSQL_OPTS: "-javaagent:/agents/opentelemetry-javaagent-all.jar -Dotel.exporter.otlp.endpoint=otel:55680"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_IMR_EXPORT_INTERVAL: 5000
+      OTEL_RESOURCE_ATTRIBUTES: "service.name=ksql_db,service.version=1.0,deployment.environment=development"
+      KSQL_OPTS: "-javaagent:/agents/opentelemetry-javaagent-all.jar"
     depends_on:
       - schema-registry
 
@@ -108,7 +112,12 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'broker:29092'
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
       OTEL_RESOURCE_ATTRIBUTES: "service.name=schema-registry"
-      SCHEMA_REGISTRY_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar -Dotel.exporter.otlp.endpoint=otel:55680"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_IMR_EXPORT_INTERVAL: 5000
+      SCHEMA_REGISTRY_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar"
     healthcheck:
       interval: 10s
       retries: 20
@@ -119,6 +128,8 @@ services:
     hostname: connect
     container_name: connect
     depends_on:
+      apm-server:
+        condition: service_healthy
       schema-registry:
         condition: service_healthy
     ports:
@@ -141,18 +152,92 @@ services:
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
       CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
-      CONNECT_LOG4J_LOGGERS: org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR
+      CONNECT_LOG4J_LOGGERS: "org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR"
+      OTEL_TRACES_EXPORTER: "logging"
       OTEL_RESOURCE_ATTRIBUTES: "service.name=kafka-connect"
-      KAFKA_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar -Dotel.exporter.otlp.endpoint=otel:55680"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_IMR_EXPORT_INTERVAL: 5000
+      KAFKA_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar"
 
-  jaeger:
-    image: jaegertracing/all-in-one:1.27
-    ports:
-      - "16686:16686"
-      - "14268"
-      - "14250"
+  apm-server:
+    image: docker.elastic.co/apm/apm-server:7.15.1
+    container_name: apm-server
+    hostname: apm-server
     depends_on:
-      - otel
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]
+    cap_drop: ["ALL"]
+    ports:
+    - 8200:8200
+    command: >
+       apm-server -e
+         -E apm-server.rum.enabled=true
+         -E setup.kibana.host=kibana:5601
+         -E setup.template.settings.index.number_of_replicas=0
+         -E apm-server.kibana.enabled=true
+         -E apm-server.kibana.host=kibana:5601
+         -E output.elasticsearch.hosts=["elasticsearch:9200"]
+    healthcheck:
+      interval: 10s
+      retries: 20
+      test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:8200/
+
+  kibana:
+    condition: service_healthy
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]
+    cap_drop: ["ALL"]
+    ports:
+    - 8200:8200
+    command: >
+       apm-server -e
+         -E apm-server.rum.enabled=true
+         -E setup.kibana.host=kibana:5601
+         -E setup.template.settings.index.number_of_replicas=0
+         -E apm-server.kibana.enabled=true
+         -E apm-server.kibana.host=kibana:5601
+         -E output.elasticsearch.hosts=["elasticsearch:9200"]
+    healthcheck:
+      interval: 10s
+      retries: 20
+      test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:8200/
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.15.1
+    container_name: elasticsearch
+    environment:
+    - node.name=es01
+    - bootstrap.memory_lock=true
+    - cluster.name=docker-cluster
+    - discovery.type=single-node
+    - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+    - 9200:9200
+    healthcheck:
+      interval: 10s
+      retries: 20
+      test: curl -s http://localhost:9200/_cluster/health | grep -vq '"status":"red"'
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.15.1
+    container_name: kibana
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+    - 5601:5601
+    healthcheck:
+      interval: 10s
+      retries: 20
+      test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:5601/api/status
 
 volumes:
   ksql_streams_data:
