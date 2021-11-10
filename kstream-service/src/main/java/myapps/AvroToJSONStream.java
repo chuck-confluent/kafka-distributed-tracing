@@ -48,21 +48,31 @@ public class AvroToJSONStream {
     }
 
     public static void main(String[] args) throws Exception {
+
+        // Get required endpoints from environments
         String brokerEndpoint = System.getenv("BOOTSTRAP_SERVER");
         String schemaRegistryEndpoint = System.getenv("SCHEMA_REGISTRY");
         if (brokerEndpoint == null) {brokerEndpoint = "localhost:9092";}
         if (schemaRegistryEndpoint == null) {schemaRegistryEndpoint = "http://localhost:8081";}
 
+        // Create configuration properties
         Properties props = new Properties();
         props.put(StreamsConfig.APPLICATION_ID_CONFIG, "streams-avro-to-json"+ UUID.randomUUID().toString());
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, brokerEndpoint);
         props.put("schema.registry.url", schemaRegistryEndpoint);
         SchemaRegistryClient client = new CachedSchemaRegistryClient(schemaRegistryEndpoint, 100);
-        final Serde avroSerde=Serdes.serdeFrom(new KafkaAvroSerializer(client), new KafkaAvroDeserializer(client));
 
-        final StreamsBuilder builder = new StreamsBuilder();
+        // Create serializers and serializers
+
+        // Avro deserializer needed to deserialize values from stockapp.trades events
+        final Serde avroSerde=Serdes.serdeFrom(new KafkaAvroSerializer(client), new KafkaAvroDeserializer(client));
+        // Json serializer needed to produce values to stockapp.trades-json
         final Serde jsonSerde=Serdes.serdeFrom(new JsonSerializer(),new JsonDeserializer());
+        // String serde needed to read the key
         final Serde stringSerde=Serdes.String();
+        
+        // Design stream topology from the StreamsBuilder
+        final StreamsBuilder builder = new StreamsBuilder();
         builder.<String, String>stream("stockapp.trades", Consumed.with(stringSerde,avroSerde))
             .mapValues(value -> {
                 System.out.println(value.toString());
@@ -72,8 +82,11 @@ public class AvroToJSONStream {
             } )
             .to("stockapp.trades-json", Produced.with(stringSerde,jsonSerde));
 
+        // Build stream topology
         final Topology topology = builder.build();
+        // Create kstreams app from topology and configuration properties
         final KafkaStreams streams = new KafkaStreams(topology, props);
+        // Create countdown latch for graceful shutdown
         final CountDownLatch latch = new CountDownLatch(1);
 
         // attach shutdown handler to catch control-c
@@ -86,8 +99,16 @@ public class AvroToJSONStream {
         });
 
         try {
+
+            // Start kstreams application
             streams.start();
+
+            // Report metrics. See MetricsReporter.java to see how to export kstreams metrics via otlp
+            new MetricsReporter().reportMetrics(streams);
+
+            // Await until shutdown hook runs
             latch.await();
+            
         } catch (Throwable e) {
             System.exit(1);
         }

@@ -13,8 +13,9 @@ public class MetricsReporter {
             Map<MetricName, ? extends Metric> metrics = streams.metrics();
             for (Map.Entry<MetricName, ? extends Metric> metric: metrics.entrySet()){
                 System.out.println(metric.getKey().toString() + ", " + metric.getValue().metricValue());
+                TimeUnit.MILLISECONDS.sleep(500);
             }
-            TimeUnit.SECONDS.sleep(10);
+            TimeUnit.SECONDS.sleep(20);
         }
     }
 }
