@@ -1,3 +1,5 @@
 kstream-service/.settings/*
 kstream-service/.classpath
 kstream-service/target/
+kstream-service/target/*
+agents/*.jar

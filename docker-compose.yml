@@ -64,7 +64,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
       OTEL_TRACES_SAMPLER: always_on
       OTEL_IMR_EXPORT_INTERVAL: 5000
-      JAVA_TOOL_OPTIONS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar"
+      JAVA_TOOL_OPTIONS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -javaagent:/mnt/jmx_prometheus_javaagent-0.16.1.jar=9999:/mnt/prometheus.yml"
     depends_on:
       schema-registry:
         condition: service_healthy
@@ -242,6 +242,21 @@ services:
       interval: 10s
       retries: 20
       test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:5601/api/status
+
+  collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: collector
+    hostname: collector
+    # Container runs otelcol CLI on launch. Command adds CLI options.
+    command: ["--config=/etc/collector.yml"]
+    volumes:
+      - ./agents/collector.yaml:/etc/collector.yml
+    ports:
+      - "13133:13133"
+      - "55680:55680"
+    depends_on:
+      apm-server:
+        condition: service_healthy
 
 volumes:
   ksql_streams_data:
