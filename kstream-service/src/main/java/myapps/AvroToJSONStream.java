@@ -103,9 +103,6 @@ public class AvroToJSONStream {
             // Start kstreams application
             streams.start();
 
-            // Report metrics. See MetricsReporter.java to see how to export kstreams metrics via otlp
-            new MetricsReporter().reportMetrics(streams);
-
             // Await until shutdown hook runs
             latch.await();
             
