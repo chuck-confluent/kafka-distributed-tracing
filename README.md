@@ -20,6 +20,12 @@ This repository is derived from the work of Nacho Munoz and Samir Hafez as descr
     wget -P agents https://github.com/open-telemetry/opentelemetry-java-contrib/releases/download/v1.7.0/opentelemetry-jmx-metrics.jar
     ```
 
+1. Download Prometheus JMX Exporter (skip if running in Gitpod).
+
+    ```bash
+    wget -P agents https://repo1.maven.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/0.16.1/jmx_prometheus_javaagent-0.16.1.jar
+    ```
+
 1. Spin up docker compose stack  (skip if running in Gitpod)
 
     ```bash
