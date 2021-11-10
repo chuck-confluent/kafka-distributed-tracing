@@ -22,13 +22,13 @@ public class MetricsReporter {
             for (Map.Entry<MetricName, ? extends Metric> metric: metrics.entrySet()){
 
                 System.out.println("Metric: " + metric.getKey().toString() + ", " + metric.getValue().metricValue());
-                meter
-                    .counterBuilder(metric.getKey().name())
-                    .setUnit(metric.getValue().toString())
-                    .buildWithCallback(
-                        r -> {
-                            r.observe(metric.getValue().metricValue());
-                    });
+                // meter
+                //     .counterBuilder(metric.getKey().name())
+                //     .setUnit(metric.getValue().toString())
+                //     .buildWithCallback(
+                //         r -> {
+                //             r.observe(metric.getValue().metricValue());
+                //     });
                 TimeUnit.MILLISECONDS.sleep(500);
             }
 
