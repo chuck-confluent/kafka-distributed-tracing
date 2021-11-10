@@ -36,7 +36,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
 public class AvroToJSONStream {
-    private static JsonNode avroToJSON(String jsonStr, boolean key)  {
+    private static JsonNode avroToJSON(String jsonStr)  {
         ObjectMapper mapper = new ObjectMapper();
         com.fasterxml.jackson.databind.JsonNode actualObj = null;
         try {
@@ -48,21 +48,26 @@ public class AvroToJSONStream {
     }
 
     public static void main(String[] args) throws Exception {
+        String brokerEndpoint = System.getenv("BOOTSTRAP_SERVER");
+        String schemaRegistryEndpoint = System.getenv("SCHEMA_REGISTRY");
+        if (brokerEndpoint == null) {brokerEndpoint = "localhost:9092";}
+        if (schemaRegistryEndpoint == null) {schemaRegistryEndpoint = "http://localhost:8081";}
+
         Properties props = new Properties();
         props.put(StreamsConfig.APPLICATION_ID_CONFIG, "streams-avro-to-json"+ UUID.randomUUID().toString());
-        props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "broker:29092");
-        props.put("schema.registry.url", "http://schema-registry:8081");
-        SchemaRegistryClient client = new CachedSchemaRegistryClient("http://schema-registry:8081", 100);
+        props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, brokerEndpoint);
+        props.put("schema.registry.url", schemaRegistryEndpoint);
+        SchemaRegistryClient client = new CachedSchemaRegistryClient(schemaRegistryEndpoint, 100);
         final Serde avroSerde=Serdes.serdeFrom(new KafkaAvroSerializer(client), new KafkaAvroDeserializer(client));
 
         final StreamsBuilder builder = new StreamsBuilder();
         final Serde jsonSerde=Serdes.serdeFrom(new JsonSerializer(),new JsonDeserializer());
         final Serde stringSerde=Serdes.String();
         builder.<String, String>stream("stockapp.trades", Consumed.with(stringSerde,avroSerde))
-            .map((key, value) -> {
+            .mapValues(value -> {
                 System.out.println(value.toString());
 
-                return KeyValue.pair(key, avroToJSON(value.toString(),false));
+                return avroToJSON(value.toString());
 
             } )
             .to("stockapp.trades-json", Produced.with(stringSerde,jsonSerde));

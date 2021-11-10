@@ -56,6 +56,8 @@ services:
     volumes:
       - ./agents:/mnt
     environment:
+      BOOTSTRAP_SERVER: broker:29092
+      SCHEMA_REGISTRY: http://schema-registry:8081
       OTEL_RESOURCE_ATTRIBUTES: "service.name=kstream-service-apm"
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
