@@ -2,53 +2,91 @@
 
 This repository is derived from the work of Nacho Munoz and Samir Hafez as described in the blog post [Integrating Apache Kafka Clients with CNCF Jaeger at Funding Circle Using OpenTelemetry](https://www.confluent.io/blog/integrate-kafka-and-jaeger-for-distributed-tracing-and-monitoring/).
 
+In this example, you will observe metrics and traces for the following application architecture:
+
+![Microservice architecture](images/architecture.svg)
+
+The observability architecture is as follows:
+
+![Observability architecture](images/obs-arch.svg)
+
 ## Run in Gitpod
 
 [![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/chuck-confluent/kafka-distributed-tracing)
 
-## Instructions
+## Prerequisites
+
+1. Download OpenTelemetry Java Agent. This automatically instruments Java applications with tracing (should already be downloaded if using Gitpod).
+
+    ```bash
+    wget -P agents https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v1.7.1/opentelemetry-javaagent-all.jar
+    ```
+
+1. Download Prometheus JMX Exporter. This automatically exports JMX metrics for Java services (should already be downloaded if using Gitpod).
+
+    ```bash
+    wget -P agents https://repo1.maven.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/0.16.1/jmx_prometheus_javaagent-0.16.1.jar
+    ```
+
+1. Start the infrastructure stack with docker compose. Because of how dependencies are defined, this will start ZooKeeper, Kafka broker, Schema Registry, Kafka Connect, ksqlDB, ElasticSearch, Kibana, and Elastic APM server.
+
+    ```bash
+    docker-compose up -d connect ksqldb-server
+    ```
+
+1. Deploy the datagen connectors, which produce Avro records to Kafka.
+
+    ```bash
+    curl -X PUT -H "Content-type: application/json" -d @connectors/datagen-connector-trades.json http://localhost:8083/connectors/datagen-connector-trades/config
+
+    curl -X PUT -H "Content-type: application/json" -d @connectors/datagen-connector-users.json http://localhost:8083/connectors/datagen-connector-users/config
+    ```
 
 
-Install Github source connector. 
+1. Open ksqlDB CLI prompt.
 
-```
-mkdir confluent-hub-components
+    ```bash
+    docker run --network kafka-distributed-tracing_default --rm --interactive --tty \
+        -v ${PWD}/ksqldb_script.sql:/app/ksqldb_script.sql \
+        confluentinc/ksqldb-cli:0.21.0 ksql \
+        http://ksqldb-server:8088
+    ```
 
-confluent-hub install --component-dir ./confluent-hub-components  --no-prompt confluentinc/kafka-connect-github:latest  
-```
 
-Spin up docker compose stack 
+1. Create streaming application in ksqlDB
 
-```
-docker-compose up -d
-```
+    ```SQL
+    ksql> run script /app/ksqldb_script.sql
+    ```
 
-Edit the connectors to update GH Token in the configuration and deploy the connectors to start sourcing data
+1. Try a push query
 
-```
-curl -X PUT -H "Content-type: application/json" -d @connectors/gh-connector-kafka.json http://localhost:8083/connectors/gh-connector-avro-kafka/config
+    ```SQL
+    SELECT * FROM stockapp_dollars_by_zip_5_min EMIT CHANGES;
+    ```
 
-curl -X PUT -H "Content-type: application/json" -d @connectors/gh-connector-jackdaw.json http://localhost:8083/connectors/gh-connector-avro-jackdaw/config
-```
+1. Press `Ctrl+D` to exit the ksql shell.
 
-Create KSqlDB streams 
+1. Start the Kafka Streams and Go applications.
 
-```
-ksql> SET 'auto.offset.reset' = 'earliest';
- 
-ksql> run script ./ksqldb_script.sql
-```
+    ```bash
+    docker-compose up -d kstream-service api-go-service
+    ```
 
-Try a push query
+1. Start the OpenTelemetry collector and view the logs to see metrics being scraped from the Kafka Streams application.
 
-```
-SELECT data FROM stargazers_kafka EMIT CHANGES LIMIT 5;
-```
+    ```bash
+    docker-compose up -d collector && docker-compose logs -f collector
+    ```
+    Exit the logs with `Ctrl-C`.
 
-### Troubleshoot
+## View Metrics and Traces in the Elastic Observability Backend
 
-* Not getting any data out of KSqlDB queries
+1. Open http://localhost:5601 to see the Kibana UI.
+    - In Gitpod, you can `Ctrl+Click` the URL output from the following command:
+        ```bash
+        echo https://5601-${GITPOD_WORKSPACE_URL#https://}
+        ```
+1. Navigate to the APM menu and view services, service map, traces, etc.
+1. Navigate to the "discover" area to see metrics.
 
-```
-SET 'auto.offset.reset' = 'earliest';
-```

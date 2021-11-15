@@ -1,0 +1,7 @@
+{
+        "connector.class" : "io.confluent.kafka.connect.datagen.DatagenConnector",
+        "kafka.topic" : "stockapp.trades",
+        "quickstart" : "Stock_Trades",
+        "max.interval" : "8000",
+        "tasks.max" : "1" 
+}

@@ -1,7 +1,130 @@
 version: '3.8'
 services:
+
+  ##### Applications
+
+  api-go-service:
+    hostname: api-go-service
+    build:
+      context: ./goservice
+    environment:
+      BOOTSTRAP_SERVERS: broker:29092
+      OTEL_ENDPOINT: "apm-server:8200"
+    ports:
+      - '3100:3100'
+    depends_on:
+      ksqldb-server:
+        condition: service_started
+      apm-server:
+        condition: service_healthy
+
+  kstream-service:
+    build:
+      context: ./kstream-service
+    container_name: kstream-service
+    hostname: kstream-service
+    volumes:
+      - ./agents:/mnt
+    environment:
+      BOOTSTRAP_SERVER: broker:29092
+      SCHEMA_REGISTRY: http://schema-registry:8081
+      OTEL_RESOURCE_ATTRIBUTES: "service.name=kstream-service-apm"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_TRACES_SAMPLER: always_on
+      JAVA_OPTS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -javaagent:/mnt/jmx_prometheus_javaagent-0.16.1.jar=kstream-service:9999:/mnt/prometheus/kafka_streams.yml"
+    depends_on:
+      schema-registry:
+        condition: service_healthy
+      apm-server:
+        condition: service_healthy
+
+  ##### Observability Infrastructure
+
+  # Elastic Application Performance Monitoring (APM) server.
+  # OTLP Compliant observability backend.
+  apm-server:
+    image: docker.elastic.co/apm/apm-server:7.15.1
+    container_name: apm-server
+    hostname: apm-server
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]
+    cap_drop: ["ALL"]
+    ports:
+    - 8200:8200
+    command: >
+       apm-server -e
+         -E apm-server.rum.enabled=true
+         -E setup.kibana.host=kibana:5601
+         -E setup.template.settings.index.number_of_replicas=0
+         -E apm-server.kibana.enabled=true
+         -E apm-server.kibana.host=kibana:5601
+         -E output.elasticsearch.hosts=["elasticsearch:9200"]
+    healthcheck:
+      interval: 10s
+      retries: 20
+      test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:8200/
+
+  # Search engine for all Elastic services
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.15.1
+    container_name: elasticsearch
+    environment:
+    - node.name=es01
+    - bootstrap.memory_lock=true
+    - cluster.name=docker-cluster
+    - discovery.type=single-node
+    - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+    - 9200:9200
+    healthcheck:
+      interval: 10s
+      retries: 20
+      test: curl -s http://localhost:9200/_cluster/health | grep -vq '"status":"red"'
+
+  # Serves Elastic GUI
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.15.1
+    container_name: kibana
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+    - 5601:5601
+    healthcheck:
+      interval: 10s
+      retries: 20
+      test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:5601/api/status
+
+  # OpenTelemetry Collector
+  # Translates JMX metrics from the prometheus exporter agent into OTLP format and sends to apm-server
+  collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: collector
+    hostname: collector
+    # Container runs otelcol CLI on launch. Command adds CLI options.
+    command: ["--config=/etc/collector.yml"]
+    volumes:
+      - ./agents/collector.yml:/etc/collector.yml
+    ports:
+      - "13133:13133"
+      - "55680:55680"
+    depends_on:
+      apm-server:
+        condition: service_healthy
+
+  ##### Data infrastructure
+
+  # Manages broker cluster metadata
   zookeeper:
-    image: confluentinc/cp-zookeeper:latest
+    image: confluentinc/cp-zookeeper:6.2.1
     hostname: zookeeper
     container_name: zookeeper
     ports:
@@ -10,8 +133,9 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
+  # Kafka broker -- Stores event streams in topics
   broker:
-    image: confluentinc/cp-server:latest
+    image: confluentinc/cp-server:6.2.1
     hostname: broker
     container_name: broker
     ports:
@@ -32,66 +156,16 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
 
-  api-go-service:
-    build:
-      context: ./goservice
-    environment:
-      BOOTSTRAP_SERVERS: broker:29092
-    ports:
-      - '3100:3100'
-    depends_on:
-      - broker
-      - zookeeper
-      - otel
-
-  kstream-service:
-    build:
-      context: ./kstream-service
-    volumes:
-      - ./agents:/mnt
-    environment:
-      OTEL_RESOURCE_ATTRIBUTES: "service.name=kstream-service"
-      JAVA_TOOL_OPTIONS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -Dotel.exporter.otlp.endpoint=otel:55680"
-    depends_on:
-      - broker
-      - zookeeper
-      - schema-registry
-      - otel
-
-
-  otel:
-    #build:
-    #context: ../opentelemetry-collector-contrib
-    #  dockerfile: examples/tracing/Dockerfile
-    image: otel/opentelemetry-collector-contrib-dev
-    command: --config /config/collector-config.yml --log-level debug
-    environment:
-      - AWS_ACCESS_KEY_ID
-      - AWS_SECRET_ACCESS_KEY
-      - AWS_SESSION_TOKEN
-      - AWS_REGION=us-east-1
-    ports:
-      - '55680:55680'
-    volumes:
-      - ./otel:/config
-      - ~/.aws:/.aws
-    depends_on:
-      - broker
-      - zookeeper
-
+  # Runs ksql queries for real-time stream processing
   ksqldb-server:
-    image: confluentinc/cp-ksqldb-server:6.0.1
+    image: confluentinc/cp-ksqldb-server:6.2.1
     hostname: ksqldb-server
     container_name: ksqldb-server
-    depends_on:
-      - broker
-      - connect
     volumes:
-      - ./agents:/tmp
+      - ./agents:/agents
     ports:
       - "8088:8088"
     environment:
-      KSQL_CONFIG_DIR: "/etc/ksql"
       KSQL_BOOTSTRAP_SERVERS: "broker:29092"
       KSQL_HOST_NAME: ksqldb-server
       KSQL_LISTENERS: "http://0.0.0.0:8088"
@@ -103,17 +177,26 @@ services:
       KSQL_KSQL_LOGGING_PROCESSING_TOPIC_REPLICATION_FACTOR: 1
       KSQL_KSQL_LOGGING_PROCESSING_TOPIC_AUTO_CREATE: 'true'
       KSQL_KSQL_LOGGING_PROCESSING_STREAM_AUTO_CREATE: 'true'
-      OTEL_RESOURCE_ATTRIBUTES: "service.name=ksqldb"
-      KSQL_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar -Dotel.exporter.otlp.endpoint=otel:55680"
+      # # Run script in headless mode
+      # KSQL_KSQL_QUERIES_FILE: /tmp/ksqldb_script.sql
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_RESOURCE_ATTRIBUTES: "service.name=ksql_db,service.version=1.0,deployment.environment=development"
+      KSQL_OPTS: "-javaagent:/agents/opentelemetry-javaagent-all.jar"
+    depends_on:
+      schema-registry:
+        condition: service_healthy
 
+  # Manages evolving schemas for event streams
   schema-registry:
-    image: confluentinc/cp-schema-registry:6.0.1
+    image: confluentinc/cp-schema-registry:6.2.1
     hostname: schema-registry
     container_name: schema-registry
-    volumes:
-      - ./agents:/tmp
     depends_on:
       - broker
+    volumes:
+      - ./agents:/tmp
     ports:
       - "8081:8081"
     environment:
@@ -121,20 +204,29 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'broker:29092'
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
       OTEL_RESOURCE_ATTRIBUTES: "service.name=schema-registry"
-      SCHEMA_REGISTRY_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar -Dotel.exporter.otlp.endpoint=otel:55680"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_TRACES_SAMPLER: always_on
+      SCHEMA_REGISTRY_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar"
+    healthcheck:
+      interval: 10s
+      retries: 20
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
 
+  # Imports/exports data from/to external systems to/from topics
   connect:
-    image: cnfldemos/kafka-connect-datagen:0.4.0-6.0.1
+    image: cnfldemos/kafka-connect-datagen:0.5.0-6.2.1
     hostname: connect
     container_name: connect
     depends_on:
-      - broker
-      - schema-registry
+      apm-server:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
     ports:
       - "8083:8083"
     volumes:
       - ./agents:/tmp
-      - ./confluent-hub-components:/usr/share/confluent-hub-components
     environment:
       CONNECT_BOOTSTRAP_SERVERS: 'broker:29092'
       CONNECT_REST_ADVERTISED_HOST_NAME: connect
@@ -151,34 +243,13 @@ services:
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
       CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
-      CONNECT_LOG4J_LOGGERS: org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR
+      CONNECT_LOG4J_LOGGERS: "org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR"
+      OTEL_TRACES_EXPORTER: "logging"
       OTEL_RESOURCE_ATTRIBUTES: "service.name=kafka-connect"
-      KAFKA_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar -Dotel.exporter.otlp.endpoint=otel:55680"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_TRACES_SAMPLER: always_on
+      KAFKA_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar"
 
-  rest-proxy:
-    image: confluentinc/cp-kafka-rest:6.0.1
-    depends_on:
-      - broker
-      - schema-registry
-    ports:
-      - 8082:8082
-    hostname: rest-proxy
-    container_name: rest-proxy
-    volumes:
-      - ./agents:/tmp
-    environment:
-      KAFKA_REST_HOST_NAME: rest-proxy
-      KAFKA_REST_BOOTSTRAP_SERVERS: 'broker:29092'
-      KAFKA_REST_LISTENERS: "http://0.0.0.0:8082"
-      KAFKA_REST_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
-      OTEL_RESOURCE_ATTRIBUTES: "service.name=kafka-rest-proxy"
-      KAFKAREST_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar -Dotel.exporter.otlp.endpoint=otel:55680"
-
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    ports:
-      - "16686:16686"
-      - "14268"
-      - "14250"
-    depends_on:
-      - otel
+volumes:
+  ksql_streams_data:

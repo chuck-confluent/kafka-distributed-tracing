@@ -1,0 +1,30 @@
+receivers:
+  prometheus:
+    config:
+      global:
+        scrape_interval: 1m
+        scrape_timeout: 30s
+        
+      scrape_configs:
+      
+      - job_name: "kstream metrics"
+        static_configs:
+        - targets: ["kstream-service:9999"]
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: hostname
+            regex: '([^:]+)(:[0-9]+)?'
+            replacement: '${1}'
+
+exporters:
+  otlp:
+    endpoint: "http://apm-server:8200"
+    insecure: true
+
+
+
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [otlp]
