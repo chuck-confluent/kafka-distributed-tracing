@@ -131,7 +131,7 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
-  # Stores event streams
+  # Kafka broker -- Stores event streams in topics
   broker:
     image: confluentinc/cp-server:6.2.1
     hostname: broker
@@ -208,7 +208,7 @@ services:
       retries: 20
       test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
 
-  # Imports data to topics on brokers and exports data from topics on brokers
+  # Imports/exports data from/to external systems to/from topics
   connect:
     image: cnfldemos/kafka-connect-datagen:0.5.0-6.2.1
     hostname: connect

@@ -74,5 +74,6 @@ The observability architecture is as follows:
         ```bash
         echo https://5601-${GITPOD_WORKSPACE_URL#https://}
         ```
-1. Navigate to 
+1. Navigate to the APM menu and view services, service map, traces, etc.
+1. Navigate to the "discover" area to see metrics.
 
