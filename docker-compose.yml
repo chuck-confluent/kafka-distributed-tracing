@@ -185,13 +185,16 @@ services:
       OTEL_RESOURCE_ATTRIBUTES: "service.name=ksql_db,service.version=1.0,deployment.environment=development"
       KSQL_OPTS: "-javaagent:/agents/opentelemetry-javaagent-all.jar"
     depends_on:
-      - schema-registry
+      schema-registry:
+        condition: service_healthy
 
   # Manages evolving schemas for event streams
   schema-registry:
     image: confluentinc/cp-schema-registry:6.2.1
     hostname: schema-registry
     container_name: schema-registry
+    depends_on:
+      - broker
     volumes:
       - ./agents:/tmp
     ports:

@@ -16,22 +16,22 @@ The observability architecture is as follows:
 
 ## Prerequisites
 
-1. Download OpenTelemetry Java Agent. This automatically instruments Java applications with tracing.
+1. Download OpenTelemetry Java Agent. This automatically instruments Java applications with tracing (should already be downloaded if using Gitpod).
 
     ```bash
     wget -P agents https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v1.7.1/opentelemetry-javaagent-all.jar
     ```
 
-1. Download Prometheus JMX Exporter. This automatically exports JMX metrics for Java services.
+1. Download Prometheus JMX Exporter. This automatically exports JMX metrics for Java services (should already be downloaded if using Gitpod).
 
     ```bash
     wget -P agents https://repo1.maven.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/0.16.1/jmx_prometheus_javaagent-0.16.1.jar
     ```
 
-1. Start the infrastructure stack with docker compose.
+1. Start the infrastructure stack with docker compose. Because of how dependencies are defined, this will start ZooKeeper, Kafka broker, Schema Registry, Kafka Connect, ksqlDB, ElasticSearch, Kibana, and Elastic APM server.
 
     ```bash
-    docker-compose up -d
+    docker-compose up -d connect ksqldb-server
     ```
 
 1. Deploy the datagen connectors, which produce Avro records to Kafka.
@@ -66,6 +66,19 @@ The observability architecture is as follows:
     ```
 
 1. Press `Ctrl+D` to exit the ksql shell.
+
+1. Start the Kafka Streams and Go applications.
+
+    ```bash
+    docker-compose up -d kstream-service api-go-service
+    ```
+
+1. Start the OpenTelemetry collector and view the logs to see metrics being scraped from the Kafka Streams application.
+
+    ```bash
+    docker-compose up -d collector && docker-compose logs -f collector
+    ```
+    Exit the logs with `Ctrl-C`.
 
 ## View Metrics and Traces in the Elastic Observability Backend
 

@@ -1,9 +1,6 @@
 ---
 # See https://github.com/confluentinc/jmx-monitoring-stacks/tree/6.1.0-post/shared-assets/jmx-exporter
 
-hostPort: kstream-service:9999
-username: 
-password: 
 ssl: false
 lowercaseOutputName: true
 lowercaseOutputLabelNames: true
