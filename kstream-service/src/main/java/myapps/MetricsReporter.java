@@ -42,7 +42,7 @@ public class MetricsReporter {
         // TODO Filter metrics collection down to a set that really matter to monitor
 
         // TODO Create collection of metrics of type long
-        Predicate<? extends Metric> isLongMetric = metric -> metric.metricValue().getClass().isInstance(long.class);
+        Predicate<Metric> isLongMetric = metric -> metric.metricValue().getClass().isInstance(long.class);
         Collection<? extends Metric> longMetrics = metrics.stream().filter(isLongMetric).collect(Collectors.toList());
 
         // TODO Create collections of metrics of other types
