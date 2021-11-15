@@ -2,6 +2,14 @@
 
 This repository is derived from the work of Nacho Munoz and Samir Hafez as described in the blog post [Integrating Apache Kafka Clients with CNCF Jaeger at Funding Circle Using OpenTelemetry](https://www.confluent.io/blog/integrate-kafka-and-jaeger-for-distributed-tracing-and-monitoring/).
 
+In this example, you will observe metrics and traces for the following application architecture:
+
+![Microservice architecture](images/architecture.svg)
+
+The observability architecture is as follows:
+
+![Observability architecture](images/obs-arch.svg)
+
 ## Run in Gitpod
 
 [![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/chuck-confluent/kafka-distributed-tracing)
@@ -25,7 +33,6 @@ This repository is derived from the work of Nacho Munoz and Samir Hafez as descr
     ```bash
     docker-compose up -d
     ```
-
 
 1. Deploy the datagen connectors, which produce Avro records to Kafka.
 
@@ -60,10 +67,12 @@ This repository is derived from the work of Nacho Munoz and Samir Hafez as descr
 
 1. Press `Ctrl+D` to exit the ksql shell.
 
-## View Metrics and Traces in Jaeger UI
+## View Metrics and Traces in the Elastic Observability Backend
 
-1. Open http://localhost:16686 to see the Jaeger UI.
+1. Open http://localhost:8200 to see the Kibana UI.
     - In Gitpod, you can `Ctrl+Click` the URL output from the following command:
-    ```bash
-    echo https://16686-${GITPOD_WORKSPACE_URL#https://}
-    ```
+        ```bash
+        echo https://8200-${GITPOD_WORKSPACE_URL#https://}
+        ```
+1. Navigate to 
+

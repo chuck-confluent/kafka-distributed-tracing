@@ -42,9 +42,7 @@ services:
     ports:
       - '3100:3100'
     depends_on:
-      broker:
-        condition: service_started
-      zookeeper:
+      ksqldb-server:
         condition: service_started
       apm-server:
         condition: service_healthy
@@ -60,10 +58,8 @@ services:
       SCHEMA_REGISTRY: http://schema-registry:8081
       OTEL_RESOURCE_ATTRIBUTES: "service.name=kstream-service-apm"
       OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
       OTEL_TRACES_SAMPLER: always_on
-      OTEL_IMR_EXPORT_INTERVAL: 5000
       JAVA_TOOL_OPTIONS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -javaagent:/mnt/jmx_prometheus_javaagent-0.16.1.jar=9999:/mnt/prometheus.yml"
     depends_on:
       schema-registry:
@@ -94,10 +90,8 @@ services:
       # # Run script in headless mode
       # KSQL_KSQL_QUERIES_FILE: /tmp/ksqldb_script.sql
       OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
       OTEL_TRACES_SAMPLER: always_on
-      OTEL_IMR_EXPORT_INTERVAL: 5000
       OTEL_RESOURCE_ATTRIBUTES: "service.name=ksql_db,service.version=1.0,deployment.environment=development"
       KSQL_OPTS: "-javaagent:/agents/opentelemetry-javaagent-all.jar"
     depends_on:
@@ -117,10 +111,8 @@ services:
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
       OTEL_RESOURCE_ATTRIBUTES: "service.name=schema-registry"
       OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
       OTEL_TRACES_SAMPLER: always_on
-      OTEL_IMR_EXPORT_INTERVAL: 5000
       SCHEMA_REGISTRY_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar"
     healthcheck:
       interval: 10s
@@ -160,10 +152,8 @@ services:
       OTEL_TRACES_EXPORTER: "logging"
       OTEL_RESOURCE_ATTRIBUTES: "service.name=kafka-connect"
       OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
       OTEL_TRACES_SAMPLER: always_on
-      OTEL_IMR_EXPORT_INTERVAL: 5000
       KAFKA_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar"
 
   apm-server:
@@ -175,25 +165,6 @@ services:
         condition: service_healthy
       kibana:
         condition: service_healthy
-    cap_add: ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]
-    cap_drop: ["ALL"]
-    ports:
-    - 8200:8200
-    command: >
-       apm-server -e
-         -E apm-server.rum.enabled=true
-         -E setup.kibana.host=kibana:5601
-         -E setup.template.settings.index.number_of_replicas=0
-         -E apm-server.kibana.enabled=true
-         -E apm-server.kibana.host=kibana:5601
-         -E output.elasticsearch.hosts=["elasticsearch:9200"]
-    healthcheck:
-      interval: 10s
-      retries: 20
-      test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:8200/
-
-  kibana:
-    condition: service_healthy
     cap_add: ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]
     cap_drop: ["ALL"]
     ports:

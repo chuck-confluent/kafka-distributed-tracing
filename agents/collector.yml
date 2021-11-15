@@ -8,3 +8,8 @@ receivers:
       scrape_configs:
       - job_name: 
         sample_limit: 10000
+
+exporters:
+  otlp:
+    endpoint: "http://apm-server:8200"
+    insecure: true
