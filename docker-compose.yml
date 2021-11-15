@@ -32,7 +32,7 @@ services:
       OTEL_TRACES_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
       OTEL_TRACES_SAMPLER: always_on
-      JAVA_OPTS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -javaagent:/mnt/jmx_prometheus_javaagent-0.16.1.jar=9999:/mnt/prometheus/kafka_streams.yml"
+      JAVA_OPTS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -javaagent:/mnt/jmx_prometheus_javaagent-0.16.1.jar=kstream-service:9999:/mnt/prometheus/kafka_streams.yml"
     depends_on:
       schema-registry:
         condition: service_healthy
