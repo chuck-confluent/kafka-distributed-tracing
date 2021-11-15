@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 import javax.management.JMException;
 
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.Metric;
@@ -42,7 +43,7 @@ public class MetricsReporter {
 
         // TODO Create collection of metrics of type long
         Predicate<? extends Metric> isLongMetric = metric -> metric.metricValue().getClass().isInstance(long.class);
-        Collection<? extends Metric> longMetrics = metrics.stream.filter(isLongMetric).collect;
+        Collection<? extends Metric> longMetrics = metrics.stream().filter(isLongMetric).collect(Collectors.toList());
 
         // TODO Create collections of metrics of other types
 
