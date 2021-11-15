@@ -69,10 +69,10 @@ The observability architecture is as follows:
 
 ## View Metrics and Traces in the Elastic Observability Backend
 
-1. Open http://localhost:8200 to see the Kibana UI.
+1. Open http://localhost:5601 to see the Kibana UI.
     - In Gitpod, you can `Ctrl+Click` the URL output from the following command:
         ```bash
-        echo https://8200-${GITPOD_WORKSPACE_URL#https://}
+        echo https://5601-${GITPOD_WORKSPACE_URL#https://}
         ```
 1. Navigate to 
 

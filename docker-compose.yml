@@ -1,5 +1,126 @@
 version: '3.8'
 services:
+
+  ##### Applications
+
+  api-go-service:
+    hostname: api-go-service
+    build:
+      context: ./goservice
+    environment:
+      BOOTSTRAP_SERVERS: broker:29092
+      OTEL_ENDPOINT: "apm-server:8200"
+    ports:
+      - '3100:3100'
+    depends_on:
+      ksqldb-server:
+        condition: service_started
+      apm-server:
+        condition: service_healthy
+
+  kstream-service:
+    build:
+      context: ./kstream-service
+    volumes:
+      - ./agents:/mnt
+    environment:
+      BOOTSTRAP_SERVER: broker:29092
+      SCHEMA_REGISTRY: http://schema-registry:8081
+      OTEL_RESOURCE_ATTRIBUTES: "service.name=kstream-service-apm"
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
+      OTEL_TRACES_SAMPLER: always_on
+      JAVA_TOOL_OPTIONS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -javaagent:/mnt/jmx_prometheus_javaagent-0.16.1.jar=9999:/mnt/prometheus.yml"
+    depends_on:
+      schema-registry:
+        condition: service_healthy
+      apm-server:
+        condition: service_healthy
+
+  ##### Observability Infrastructure
+
+  # Elastic Application Performance Monitoring (APM) server.
+  # OTLP Compliant observability backend.
+  apm-server:
+    image: docker.elastic.co/apm/apm-server:7.15.1
+    container_name: apm-server
+    hostname: apm-server
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]
+    cap_drop: ["ALL"]
+    ports:
+    - 8200:8200
+    command: >
+       apm-server -e
+         -E apm-server.rum.enabled=true
+         -E setup.kibana.host=kibana:5601
+         -E setup.template.settings.index.number_of_replicas=0
+         -E apm-server.kibana.enabled=true
+         -E apm-server.kibana.host=kibana:5601
+         -E output.elasticsearch.hosts=["elasticsearch:9200"]
+    healthcheck:
+      interval: 10s
+      retries: 20
+      test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:8200/
+
+  # Search engine for all Elastic services
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.15.1
+    container_name: elasticsearch
+    environment:
+    - node.name=es01
+    - bootstrap.memory_lock=true
+    - cluster.name=docker-cluster
+    - discovery.type=single-node
+    - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+    - 9200:9200
+    healthcheck:
+      interval: 10s
+      retries: 20
+      test: curl -s http://localhost:9200/_cluster/health | grep -vq '"status":"red"'
+
+  # Serves Elastic GUI
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.15.1
+    container_name: kibana
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+    - 5601:5601
+    healthcheck:
+      interval: 10s
+      retries: 20
+      test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:5601/api/status
+
+  # OpenTelemetry Collector
+  # Translates JMX metrics from the prometheus exporter agent into OTLP format and sends to apm-server
+  collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: collector
+    hostname: collector
+    # Container runs otelcol CLI on launch. Command adds CLI options.
+    command: ["--config=/etc/collector.yml"]
+    volumes:
+      - ./agents/collector.yaml:/etc/collector.yml
+    ports:
+      - "13133:13133"
+      - "55680:55680"
+    depends_on:
+      apm-server:
+        condition: service_healthy
+
+  ##### Data infrastructure
+
+  # Manages broker cluster metadata
   zookeeper:
     image: confluentinc/cp-zookeeper:6.2.1
     hostname: zookeeper
@@ -10,6 +131,7 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
+  # Stores event streams
   broker:
     image: confluentinc/cp-server:6.2.1
     hostname: broker
@@ -32,41 +154,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
 
-  api-go-service:
-    hostname: api-go-service
-    build:
-      context: ./goservice
-    environment:
-      BOOTSTRAP_SERVERS: broker:29092
-      OTEL_ENDPOINT: "apm-server:8200"
-    ports:
-      - '3100:3100'
-    depends_on:
-      ksqldb-server:
-        condition: service_started
-      apm-server:
-        condition: service_healthy
-
-
-  kstream-service:
-    build:
-      context: ./kstream-service
-    volumes:
-      - ./agents:/mnt
-    environment:
-      BOOTSTRAP_SERVER: broker:29092
-      SCHEMA_REGISTRY: http://schema-registry:8081
-      OTEL_RESOURCE_ATTRIBUTES: "service.name=kstream-service-apm"
-      OTEL_TRACES_EXPORTER: otlp
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
-      OTEL_TRACES_SAMPLER: always_on
-      JAVA_TOOL_OPTIONS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -javaagent:/mnt/jmx_prometheus_javaagent-0.16.1.jar=9999:/mnt/prometheus.yml"
-    depends_on:
-      schema-registry:
-        condition: service_healthy
-      apm-server:
-        condition: service_healthy
-
+  # Runs ksql queries for real-time stream processing
   ksqldb-server:
     image: confluentinc/cp-ksqldb-server:6.2.1
     hostname: ksqldb-server
@@ -97,6 +185,7 @@ services:
     depends_on:
       - schema-registry
 
+  # Manages evolving schemas for event streams
   schema-registry:
     image: confluentinc/cp-schema-registry:6.2.1
     hostname: schema-registry
@@ -119,6 +208,7 @@ services:
       retries: 20
       test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
 
+  # Imports data to topics on brokers and exports data from topics on brokers
   connect:
     image: cnfldemos/kafka-connect-datagen:0.5.0-6.2.1
     hostname: connect
@@ -155,79 +245,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
       OTEL_TRACES_SAMPLER: always_on
       KAFKA_OPTS: "-javaagent:/tmp/opentelemetry-javaagent-all.jar"
-
-  apm-server:
-    image: docker.elastic.co/apm/apm-server:7.15.1
-    container_name: apm-server
-    hostname: apm-server
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-      kibana:
-        condition: service_healthy
-    cap_add: ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]
-    cap_drop: ["ALL"]
-    ports:
-    - 8200:8200
-    command: >
-       apm-server -e
-         -E apm-server.rum.enabled=true
-         -E setup.kibana.host=kibana:5601
-         -E setup.template.settings.index.number_of_replicas=0
-         -E apm-server.kibana.enabled=true
-         -E apm-server.kibana.host=kibana:5601
-         -E output.elasticsearch.hosts=["elasticsearch:9200"]
-    healthcheck:
-      interval: 10s
-      retries: 20
-      test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:8200/
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.15.1
-    container_name: elasticsearch
-    environment:
-    - node.name=es01
-    - bootstrap.memory_lock=true
-    - cluster.name=docker-cluster
-    - discovery.type=single-node
-    - ES_JAVA_OPTS=-Xms1g -Xmx1g
-    ports:
-    - 9200:9200
-    healthcheck:
-      interval: 10s
-      retries: 20
-      test: curl -s http://localhost:9200/_cluster/health | grep -vq '"status":"red"'
-
-  kibana:
-    image: docker.elastic.co/kibana/kibana:7.15.1
-    container_name: kibana
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-    environment:
-      ELASTICSEARCH_URL: http://elasticsearch:9200
-      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
-    ports:
-    - 5601:5601
-    healthcheck:
-      interval: 10s
-      retries: 20
-      test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:5601/api/status
-
-  collector:
-    image: otel/opentelemetry-collector:latest
-    container_name: collector
-    hostname: collector
-    # Container runs otelcol CLI on launch. Command adds CLI options.
-    command: ["--config=/etc/collector.yml"]
-    volumes:
-      - ./agents/collector.yaml:/etc/collector.yml
-    ports:
-      - "13133:13133"
-      - "55680:55680"
-    depends_on:
-      apm-server:
-        condition: service_healthy
 
 volumes:
   ksql_streams_data:
