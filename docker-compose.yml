@@ -21,6 +21,8 @@ services:
   kstream-service:
     build:
       context: ./kstream-service
+    container_name: kstream-service
+    hostname: kstream-service
     volumes:
       - ./agents:/mnt
     environment:
@@ -30,7 +32,7 @@ services:
       OTEL_TRACES_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
       OTEL_TRACES_SAMPLER: always_on
-      JAVA_TOOL_OPTIONS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -javaagent:/mnt/jmx_prometheus_javaagent-0.16.1.jar=9999:/mnt/prometheus/kafka_streams.yml"
+      JAVA_OPTS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -javaagent:/mnt/jmx_prometheus_javaagent-0.16.1.jar=9999:/mnt/prometheus/kafka_streams.yml"
     depends_on:
       schema-registry:
         condition: service_healthy
@@ -110,7 +112,7 @@ services:
     # Container runs otelcol CLI on launch. Command adds CLI options.
     command: ["--config=/etc/collector.yml"]
     volumes:
-      - ./agents/collector.yaml:/etc/collector.yml
+      - ./agents/collector.yml:/etc/collector.yml
     ports:
       - "13133:13133"
       - "55680:55680"
