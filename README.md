@@ -14,7 +14,7 @@ The observability architecture is as follows:
 
 [![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/chuck-confluent/kafka-distributed-tracing)
 
-## Prerequisites
+## Start services
 
 1. Download OpenTelemetry Java Agent. This automatically instruments Java applications with tracing (should already be downloaded if using Gitpod).
 
@@ -65,18 +65,30 @@ The observability architecture is as follows:
     SELECT * FROM stockapp_dollars_by_zip_5_min EMIT CHANGES;
     ```
 
-1. Press `Ctrl+D` to exit the ksql shell.
+    Press `Ctrl+D` to exit the ksql shell.
 
 1. Start the Kafka Streams and Go applications.
 
     ```bash
     docker-compose up -d kstream-service api-go-service
     ```
+    You can check the logs of each service with
+    ```bash
+    docker-compose logs -f kstream-service
+    ```
+    ```bash
+    docker-compose logs -f api-go-service
+    ```
+    Press `Ctrl+C` to exit the logs.
 
-1. Start the OpenTelemetry collector and view the logs to see metrics being scraped from the Kafka Streams application.
+1. Start the OpenTelemetry collector and view the logs to see metrics being scraped from the Kafka Streams application. It will take a minute before the collector scrapes the JMX metrics.
 
     ```bash
-    docker-compose up -d collector && docker-compose logs -f collector
+    docker-compose up -d collector
+    ```
+    See the logs:
+    ```bash
+    docker-compose logs -f collector
     ```
     Exit the logs with `Ctrl-C`.
 

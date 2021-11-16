@@ -64,6 +64,8 @@ services:
         -E apm-server.kibana.enabled=true
         -E apm-server.kibana.host=kibana:5601
         -E output.elasticsearch.hosts=["elasticsearch:9200"]
+        -E output.elasticsearch.bulk_max_size=10000
+        -E queue.mem.events=10000
     healthcheck:
       interval: 10s
       retries: 20
@@ -219,8 +221,6 @@ services:
     hostname: connect
     container_name: connect
     depends_on:
-      apm-server:
-        condition: service_healthy
       schema-registry:
         condition: service_healthy
     ports:

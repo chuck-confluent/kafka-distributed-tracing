@@ -9,8 +9,8 @@ whitelistObjectNames:
   # The two lines below are used to pull the Kafka Client Producer & consumer metrics from Kafka Streams Client.
   # If you care about Producer/Consumer metrics for Kafka Streams, please uncomment 2 lines below.
   # Please note that this increases the scrape duration by about 1-2 seconds as it needs to parse a lot of data.
-  - "kafka.consumer:*"
-  - "kafka.producer:*"
+  # - "kafka.consumer:*"
+  # - "kafka.producer:*"
 blacklistObjectNames:
   - kafka.streams:type=kafka-metrics-count
   - "kafka.admin.client:*"
