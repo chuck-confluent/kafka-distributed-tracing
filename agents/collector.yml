@@ -26,6 +26,8 @@ exporters:
   otlp:
     endpoint: "http://apm-server:8200"
     insecure: true
+  prometheus:
+    endpoint: 0.0.0.0:8889
 
 
 
@@ -34,4 +36,4 @@ service:
     metrics:
       receivers: [prometheus]
       processors: [batch]
-      exporters: [otlp]
+      exporters: [otlp,prometheus]

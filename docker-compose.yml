@@ -118,6 +118,7 @@ services:
     ports:
       - "13133:13133"
       - "55680:55680"
+      - "8889:8889"
     depends_on:
       apm-server:
         condition: service_healthy
