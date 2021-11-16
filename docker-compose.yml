@@ -32,7 +32,7 @@ services:
       OTEL_TRACES_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200
       OTEL_TRACES_SAMPLER: always_on
-      JAVA_OPTS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -javaagent:/mnt/jmx_prometheus_javaagent-0.16.1.jar=kstream-service:9999:/mnt/prometheus/kafka_streams.yml"
+      JAVA_OPTS: "-javaagent:/mnt/opentelemetry-javaagent-all.jar -javaagent:/mnt/jmx_prometheus_javaagent-0.16.1.jar=9999:/mnt/prometheus/kafka_streams.yml"
     depends_on:
       schema-registry:
         condition: service_healthy
@@ -55,15 +55,15 @@ services:
     cap_add: ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]
     cap_drop: ["ALL"]
     ports:
-    - 8200:8200
+      - 8200:8200
     command: >
-       apm-server -e
-         -E apm-server.rum.enabled=true
-         -E setup.kibana.host=kibana:5601
-         -E setup.template.settings.index.number_of_replicas=0
-         -E apm-server.kibana.enabled=true
-         -E apm-server.kibana.host=kibana:5601
-         -E output.elasticsearch.hosts=["elasticsearch:9200"]
+      apm-server -e
+        -E apm-server.rum.enabled=true
+        -E setup.kibana.host=kibana:5601
+        -E setup.template.settings.index.number_of_replicas=0
+        -E apm-server.kibana.enabled=true
+        -E apm-server.kibana.host=kibana:5601
+        -E output.elasticsearch.hosts=["elasticsearch:9200"]
     healthcheck:
       interval: 10s
       retries: 20
@@ -74,13 +74,13 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.15.1
     container_name: elasticsearch
     environment:
-    - node.name=es01
-    - bootstrap.memory_lock=true
-    - cluster.name=docker-cluster
-    - discovery.type=single-node
-    - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - node.name=es01
+      - bootstrap.memory_lock=true
+      - cluster.name=docker-cluster
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
     ports:
-    - 9200:9200
+      - 9200:9200
     healthcheck:
       interval: 10s
       retries: 20
@@ -97,7 +97,7 @@ services:
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
     ports:
-    - 5601:5601
+      - 5601:5601
     healthcheck:
       interval: 10s
       retries: 20
@@ -128,7 +128,7 @@ services:
     hostname: zookeeper
     container_name: zookeeper
     ports:
-     - '2181:2181'
+      - '2181:2181'
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -244,7 +244,6 @@ services:
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
       CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
       CONNECT_LOG4J_LOGGERS: "org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR"
-      OTEL_TRACES_EXPORTER: "logging"
       OTEL_RESOURCE_ATTRIBUTES: "service.name=kafka-connect"
       OTEL_TRACES_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_ENDPOINT: http://apm-server:8200

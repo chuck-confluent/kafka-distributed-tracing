@@ -16,8 +16,8 @@
 -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>streams.examples</groupId>
@@ -78,7 +78,7 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.8.0</version>
                     <configuration>
-                       <release>11</release>
+                        <release>11</release>
                     </configuration>
                     <dependencies>
                         <dependency>
@@ -129,6 +129,11 @@
             <groupId>io.confluent</groupId>
             <artifactId>kafka-avro-serializer</artifactId>
             <version>6.2.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <version>1.7.32</version>
         </dependency>
         <!-- OpenTelemetry -->
         <dependency>
