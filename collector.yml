@@ -26,6 +26,7 @@ exporters:
   otlp:
     endpoint: "http://apm-server:8200"
     insecure: true
+  # Used for Prometheus metrics debugging
   prometheus:
     endpoint: 0.0.0.0:8889
 

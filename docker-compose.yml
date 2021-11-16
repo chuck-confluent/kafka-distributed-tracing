@@ -114,11 +114,11 @@ services:
     # Container runs otelcol CLI on launch. Command adds CLI options.
     command: ["--config=/etc/collector.yml"]
     volumes:
-      - ./agents/collector.yml:/etc/collector.yml
+      - ./collector.yml:/etc/collector.yml
     ports:
       - "13133:13133"
       - "55680:55680"
-      - "8889:8889"
+      - "8889:8889" # used for prometheus metrics debugging
     depends_on:
       apm-server:
         condition: service_healthy
