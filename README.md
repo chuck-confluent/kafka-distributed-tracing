@@ -100,5 +100,15 @@ The observability architecture is as follows:
         echo https://5601-${GITPOD_WORKSPACE_URL#https://}
         ```
 1. Navigate to the APM menu and view services, service map, traces, etc.
-1. Navigate to the "discover" area to see metrics.
+       Note: You'll need to click through the trial license setup to see the service map.
+3. Navigate to the "discover" area to see metrics.
 
+## Places to Explore
+
+- Look at JMX metrics configurations for various components under the `agents/prometheus/` folder. These are used by the Prometheus JMX Exporter Agent to expose metrics for scraping.
+  - For example, look at [agents/prometheus/kafka_streams.yml](./agents/prometheus/kafka_streams.yml) for a nice, opinionated collection of Kafka Streams JMX metrics
+- Look at the [docker-compose.yml](./docker-compose.yml) file to see all the apps and services and their configuration
+- Look at the source code of the Kafka Streams app, including its Dockerfile
+  - The Kafka Streams application has a class called `MetricsReporter` that has an outline for how to manually send metrics using the OpenTelemetry Java API instead of the Prometheus JMX Exporter Agent
+- Look at the source code of the Go app
+- Look at the datagen connectors and the ksqlDB query to see what transformations are happening to the data
