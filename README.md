@@ -46,7 +46,7 @@ The observability architecture is as follows:
 1. Open ksqlDB CLI prompt.
 
     ```bash
-    docker run --network kafka-distributed-tracing_default --rm --interactive --tty \
+    docker run --network kafka-observability_default --rm --interactive --tty \
         -v ${PWD}/ksqldb_script.sql:/app/ksqldb_script.sql \
         confluentinc/ksqldb-cli:0.21.0 ksql \
         http://ksqldb-server:8088
