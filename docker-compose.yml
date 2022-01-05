@@ -44,7 +44,7 @@ services:
   # Elastic Application Performance Monitoring (APM) server.
   # OTLP Compliant observability backend.
   apm-server:
-    image: docker.elastic.co/apm/apm-server:7.15.1
+    image: docker.elastic.co/apm/apm-server:7.16.2
     container_name: apm-server
     hostname: apm-server
     depends_on:
@@ -73,7 +73,7 @@ services:
 
   # Search engine for all Elastic services
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.15.1
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.16.2
     container_name: elasticsearch
     environment:
       - node.name=es01
@@ -90,7 +90,7 @@ services:
 
   # Serves Elastic GUI
   kibana:
-    image: docker.elastic.co/kibana/kibana:7.15.1
+    image: docker.elastic.co/kibana/kibana:7.16.2
     container_name: kibana
     depends_on:
       elasticsearch:
