@@ -12,7 +12,7 @@ The observability architecture is as follows:
 
 ## Run in Gitpod
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/chuck-confluent/kafka-distributed-tracing)
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/chuck-confluent/kafka-observability)
 
 ## Start services
 
@@ -46,7 +46,7 @@ The observability architecture is as follows:
 1. Open ksqlDB CLI prompt.
 
     ```bash
-    docker run --network kafka-distributed-tracing_default --rm --interactive --tty \
+    docker run --network kafka-observability_default --rm --interactive --tty \
         -v ${PWD}/ksqldb_script.sql:/app/ksqldb_script.sql \
         confluentinc/ksqldb-cli:0.21.0 ksql \
         http://ksqldb-server:8088
@@ -62,7 +62,7 @@ The observability architecture is as follows:
 1. Try a push query
 
     ```SQL
-    SELECT * FROM stockapp_dollars_by_zip_5_min EMIT CHANGES;
+    ksql> SELECT * FROM stockapp_dollars_by_zip_5_min EMIT CHANGES;
     ```
 
     Press `Ctrl+D` to exit the ksql shell.
